@@ -4,9 +4,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 
-export const Route = createFileRoute("/secret-chat")({
-  component: SecretChat,
-});
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import { SecretChat } from './main' 
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <SecretChat />
+  </React.StrictMode>,
+)
+
 
 type MsgKind = "text" | "image" | "video" | "audio" | "file";
 
