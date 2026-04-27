@@ -19,9 +19,7 @@ type Msg = {
 };
 
 const DEVICE_KEY = "darkpigeon_device_id";
-const MAX_FILE_BYTES = 20 * 1024 * 1024;
 
-// --- HELPERS ---
 function getDeviceId(): string {
   if (typeof window === "undefined") return "";
   let id = localStorage.getItem(DEVICE_KEY);
@@ -32,21 +30,12 @@ function getDeviceId(): string {
   return id;
 }
 
-function detectKind(file: File): MsgKind {
-  const t = file.type;
-  if (t.startsWith("image/")) return "image";
-  if (t.startsWith("video/")) return "video";
-  if (t.startsWith("audio/")) return "audio";
-  return "file";
-}
-
-// --- MAIN CHAT COMPONENT ---
+// --- APP COMPONENT ---
 function SecretChat() {
   const [deviceId, setDeviceId] = useState("");
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
-  const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -58,19 +47,15 @@ function SecretChat() {
       .select("*")
       .order("created_at", { ascending: true })
       .then(({ data, error }) => {
-        if (error) console.error("Load error:", error);
-        else if (data) setMessages(data as Msg[]);
+        if (!error && data) setMessages(data as Msg[]);
         setLoading(false);
       });
 
-    const channel = supabase
-      .channel("chat")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "secret_messages" }, 
+    const channel = supabase.channel("realtime").on("postgres_changes", 
+      { event: "INSERT", schema: "public", table: "secret_messages" }, 
       (payload) => {
-        const m = payload.new as Msg;
-        setMessages((prev) => [...prev, m]);
-      })
-      .subscribe();
+        setMessages((prev) => [...prev, payload.new as Msg]);
+      }).subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, []);
@@ -81,39 +66,42 @@ function SecretChat() {
 
   const sendText = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || sending) return;
-    setSending(true);
-    const { error } = await supabase.from("secret_messages").insert({ sender: deviceId, text: input, kind: "text" });
-    if (!error) setInput("");
-    setSending(false);
+    if (!input.trim()) return;
+    const textToSend = input;
+    setInput("");
+    await supabase.from("secret_messages").insert({ sender: deviceId, text: textToSend, kind: "text" });
   };
 
   return (
-    <div className="flex flex-col h-screen bg-[#0b141a] text-white">
-      <header className="p-4 bg-[#202c33] shadow-md font-bold">🔒 Dark Pigeon Book</header>
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
+    <div className="flex flex-col h-screen bg-[#0b141a] text-white font-sans">
+      <header className="p-4 bg-[#202c33] flex items-center gap-3 shadow-lg">
+        <div className="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center">🔒</div>
+        <div>
+          <p className="font-bold">Secret Chat</p>
+          <p className="text-xs text-emerald-400">online</p>
+        </div>
+      </header>
+
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.map((m) => (
           <div key={m.id} className={`flex ${m.sender === deviceId ? "justify-end" : "justify-start"}`}>
-            <div className={`p-3 rounded-lg max-w-[80%] ${m.sender === deviceId ? "bg-[#005c4b]" : "bg-[#202c33]"}`}>
-              {m.text}
+            <div className={`p-2.5 rounded-lg max-w-[85%] ${m.sender === deviceId ? "bg-[#005c4b]" : "bg-[#202c33]"}`}>
+              <p className="text-[15px]">{m.text}</p>
             </div>
           </div>
         ))}
       </div>
-      <form onSubmit={sendText} className="p-4 bg-[#202c33] flex gap-2">
-        <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Message likhein..." className="bg-[#2a3942] border-none text-white" />
-        <Button type="submit" disabled={sending}>Bhejein</Button>
+
+      <form onSubmit={sendText} className="p-3 bg-[#202c33] flex gap-2">
+        <Input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Message..." className="bg-[#2a3942] border-none text-white rounded-full" />
+        <Button type="submit" className="rounded-full bg-emerald-600">➤</Button>
       </form>
     </div>
   );
 }
 
 // --- RENDER ---
-const rootElement = document.getElementById('root');
-if (rootElement) {
-  ReactDOM.createRoot(rootElement).render(
-    <React.StrictMode>
-      <SecretChat />
-    </React.StrictMode>
-  );
+const root = document.getElementById("root");
+if (root) {
+  ReactDOM.createRoot(root).render(<SecretChat />);
 }
